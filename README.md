@@ -21,6 +21,8 @@ Author end-to-end multi-device mobile tests in plain English (e.g., *"Device A c
 
 ## 🏗️ Architecture
 
+![System Architecture](assets/architecture.png)
+
 ```text
 User Prompt ("Device A calls Device B...")
                   │
