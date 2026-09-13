@@ -98,11 +98,22 @@ Executed Steps:
             
             s_color = "#10b981" if s_status == "PASSED" else "#ef4444"
             
-            # Images gallery for step
+            # Images gallery for step with embedded Base64 data URIs
             imgs_html = ""
             for img_name in s_screens:
-                img_rel = f"screenshots/{img_name}"
-                imgs_html += f'<div class="screenshot-box"><img src="{img_rel}" alt="{img_name}" /><div class="ss-caption">{img_name}</div></div>'
+                img_path = run_dir / "screenshots" / img_name
+                img_src = f"screenshots/{img_name}"
+                if img_path.exists():
+                    try:
+                        import base64
+                        with open(img_path, "rb") as img_file:
+                            b64_data = base64.b64encode(img_file.read()).decode("utf-8")
+                            if b64_data:
+                                img_src = f"data:image/png;base64,{b64_data}"
+                    except Exception:
+                        pass
+                
+                imgs_html += f'<div class="screenshot-box"><img src="{img_src}" alt="{img_name}" loading="lazy" /><div class="ss-caption">{img_name}</div></div>'
 
             err_block = f'<div class="error-msg">⚠️ {s_err}</div>' if s_err else ''
 
