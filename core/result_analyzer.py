@@ -266,21 +266,28 @@ Executed Steps:
         }}
         .screenshot-box {{
             background: #0f172a;
-            border-radius: 6px;
-            padding: 8px;
+            border-radius: 8px;
+            padding: 10px;
             text-align: center;
             border: 1px solid #334155;
+            transition: transform 0.2s, border-color 0.2s;
+            cursor: pointer;
+        }}
+        .screenshot-box:hover {{
+            transform: translateY(-2px);
+            border-color: #38bdf8;
         }}
         .screenshot-box img {{
             max-width: 100%;
             height: auto;
-            border-radius: 4px;
+            border-radius: 6px;
         }}
         .ss-caption {{
             color: #94a3b8;
             font-size: 11px;
-            margin-top: 6px;
+            margin-top: 8px;
             word-break: break-all;
+            font-family: monospace;
         }}
         .ai-diagnosis-card {{
             background: #2e1065;
@@ -298,9 +305,33 @@ Executed Steps:
             color: #f3e8ff;
             line-height: 1.6;
         }}
+        /* Lightbox Modal */
+        #lightbox {{
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }}
+        #lightbox img {{
+            max-width: 90vw;
+            max-height: 90vh;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }}
     </style>
 </head>
 <body>
+    <div id="lightbox" onclick="this.style.display='none'">
+        <img id="lightbox-img" src="" alt="Zoomed Screenshot" />
+    </div>
+
     <div class="container">
         <div class="header-card">
             <div>
@@ -328,15 +359,26 @@ Executed Steps:
         {ai_diag_html}
 
         <div class="devices-section">
-            <h3 style="color: #94a3b8;">Allocated Devices</h3>
+            <h3 style="color: #94a3b8;">Allocated Devices Pool</h3>
             {devices_html}
         </div>
 
         <div class="steps-section">
-            <h3 style="color: #94a3b8;">Execution Timeline</h3>
+            <h3 style="color: #94a3b8;">Execution Timeline & Visual Proof</h3>
             {steps_html}
         </div>
     </div>
+
+    <script>
+        document.querySelectorAll('.screenshot-box img').forEach(img => {{
+            img.addEventListener('click', () => {{
+                const lb = document.getElementById('lightbox');
+                const lbImg = document.getElementById('lightbox-img');
+                lbImg.src = img.src;
+                lb.style.display = 'flex';
+            }});
+        }});
+    </script>
 </body>
 </html>
 """

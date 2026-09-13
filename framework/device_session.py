@@ -1,6 +1,6 @@
 """
 DeviceSession: Encapsulates high-level automation actions for an individual Android device.
-Supports both live ADB execution and high-fidelity simulated sandbox visual rendering.
+Supports both live ADB execution and ultra-high-fidelity simulated sandbox visual rendering with phone bezels and notifications.
 """
 
 import os
@@ -30,6 +30,7 @@ class DeviceSession:
         self._current_app = "com.google.android.apps.nexuslauncher"
         self._screen_text = ["Home", "Phone", "Messages", "Chrome", "Camera"]
         self._messages: List[Dict[str, str]] = []
+        self._notification: Optional[Dict[str, str]] = None
         self.peers: List['DeviceSession'] = []
 
     def link_peer(self, peer: 'DeviceSession'):
@@ -69,6 +70,7 @@ class DeviceSession:
                 peer._in_call = True
                 peer._call_target = self.serial
                 peer._current_app = "com.google.android.dialer"
+                peer._notification = {"title": "📞 Incoming Call", "text": f"From {self.alias.upper()} ({self.serial})"}
                 peer._screen_text = ["Incoming Call...", f"From: {self.serial}", "Answer", "Decline"]
             time.sleep(0.5)
             return True
@@ -83,6 +85,7 @@ class DeviceSession:
         self._log_action("Answering incoming call")
         if self.is_simulated:
             self._in_call = True
+            self._notification = None
             self._screen_text = ["Call in progress", "00:05", "Mute", "End Call"]
             time.sleep(0.5)
             return True
@@ -97,9 +100,11 @@ class DeviceSession:
         self._log_action("Ending call")
         if self.is_simulated:
             self._in_call = False
+            self._notification = None
             self._screen_text = ["Call ended", "Home", "Phone", "Messages"]
             for peer in self.peers:
                 peer._in_call = False
+                peer._notification = None
                 peer._screen_text = ["Call ended", "Home", "Phone", "Messages"]
             time.sleep(0.5)
             return True
@@ -131,7 +136,7 @@ class DeviceSession:
             })
             self._screen_text = ["Messages", f"To: {phone_number}", text, "Sent • Delivered"]
             
-            # Send into peers' inbox
+            # Deliver to peers & create notification popup
             for peer in self.peers:
                 peer._messages.append({
                     "direction": "in",
@@ -140,6 +145,10 @@ class DeviceSession:
                     "text": text,
                     "time": time.strftime("%I:%M %p")
                 })
+                peer._notification = {
+                    "title": f"💬 Message from {self.alias.upper()}",
+                    "text": text
+                }
                 peer._screen_text.append(text)
             time.sleep(0.5)
             return True
@@ -153,6 +162,7 @@ class DeviceSession:
         self._log_action(f"Opening app: {package_name}")
         if self.is_simulated:
             self._current_app = package_name
+            self._notification = None  # Clear notification when user opens app
             if "messaging" in package_name:
                 self._screen_text = ["Messages", "Conversations", "Start chat"] + [m["text"] for m in self._messages]
             elif "chrome" in package_name:
@@ -247,32 +257,36 @@ class DeviceSession:
 
         if self.is_simulated:
             if HAS_PIL:
-                # Generate a high-fidelity visual mock screenshot image with Pillow
-                img = Image.new("RGB", (420, 750), color=(18, 22, 28))
+                # 440 x 780 Phone Canvas with Device Bezel
+                img = Image.new("RGB", (440, 780), color=(10, 14, 20))
                 draw = ImageDraw.Draw(img)
                 
+                # Outer Phone Chassis (Metallic curved border)
+                draw.rounded_rectangle([(6, 6), (434, 774)], radius=24, fill=(18, 24, 34), outline=(71, 85, 105), width=2)
+                
+                # Screen Inner Display
+                draw.rounded_rectangle([(14, 14), (426, 766)], radius=18, fill=(15, 23, 42))
+
+                # Punch-hole Selfie Camera Dot (Top Center)
+                draw.ellipse([(212, 22), (228, 38)], fill=(5, 5, 8))
+
                 # 1. Status Bar (Top)
-                draw.rectangle([(0, 0), (420, 36)], fill=(12, 15, 20))
-                draw.text((16, 10), "12:00", fill=(240, 240, 240))
-                draw.text((310, 10), "📶 5G  🔋 98%", fill=(200, 200, 200))
+                draw.text((28, 24), "12:00", fill=(240, 240, 240))
+                draw.text((320, 24), "📶 5G 🔋 98%", fill=(200, 200, 200))
 
-                # 2. App Header
-                draw.rectangle([(0, 36), (420, 95)], fill=(30, 41, 59))
-                dev_badge = f"[{self.alias.upper()}] {self.serial}"
-                draw.text((16, 46), dev_badge, fill=(56, 189, 248))
+                # 2. App Header Card
+                draw.rectangle([(14, 48), (426, 105)], fill=(30, 41, 59))
+                dev_badge = f"📱 {self.alias.upper()} • {self.serial}"
+                draw.text((26, 56), dev_badge, fill=(56, 189, 248))
 
-                # 3. Dynamic Screen Rendering according to active app
-                if "messaging" in self._current_app.lower() or len(self._messages) > 0:
-                    # Header for Messages
-                    draw.text((16, 68), "💬 Google Messages", fill=(255, 255, 255))
+                # 3. Dynamic App View Rendering
+                if "messaging" in self._current_app.lower():
+                    draw.text((26, 78), "💬 Messages • Active Chat", fill=(255, 255, 255))
                     
-                    # Chat background
-                    draw.rectangle([(10, 105), (410, 675)], fill=(15, 23, 42), outline=(51, 65, 85))
-                    
-                    # Render Chat Bubbles
-                    y = 125
+                    # Conversation area
+                    y = 120
                     if not self._messages:
-                        draw.text((30, y), "No recent messages in conversation", fill=(148, 163, 184))
+                        draw.text((36, y), "No recent messages in conversation", fill=(148, 163, 184))
                     else:
                         for msg in self._messages[-4:]:
                             is_out = msg.get("direction") == "out"
@@ -280,66 +294,63 @@ class DeviceSession:
                             msg_time = msg.get("time", "12:00 PM")
                             
                             if is_out:
-                                # Outgoing Message (Right-aligned, Blue Bubble)
-                                draw.rounded_rectangle([(140, y), (395, y + 60)], radius=12, fill=(2, 132, 199))
-                                draw.text((155, y + 10), msg_text[:32], fill=(255, 255, 255))
-                                if len(msg_text) > 32:
-                                    draw.text((155, y + 26), msg_text[32:64], fill=(255, 255, 255))
-                                draw.text((280, y + 42), f"{msg_time} • Sent ✓✓", fill=(224, 242, 254))
+                                # Outgoing message (Blue Bubble on Right)
+                                draw.rounded_rectangle([(140, y), (410, y + 62)], radius=12, fill=(2, 132, 199))
+                                draw.text((152, y + 8), msg_text[:34], fill=(255, 255, 255))
+                                if len(msg_text) > 34:
+                                    draw.text((152, y + 24), msg_text[34:68], fill=(255, 255, 255))
+                                draw.text((285, y + 42), f"{msg_time} • Sent ✓✓", fill=(224, 242, 254))
                             else:
-                                # Incoming Message (Left-aligned, Slate Gray Bubble)
-                                draw.rounded_rectangle([(25, y), (280, y + 60)], radius=12, fill=(51, 65, 85))
-                                draw.text((40, y + 10), msg_text[:32], fill=(255, 255, 255))
-                                if len(msg_text) > 32:
-                                    draw.text((40, y + 26), msg_text[32:64], fill=(255, 255, 255))
-                                draw.text((40, y + 42), f"From {msg.get('sender', 'Peer')} • {msg_time}", fill=(148, 163, 184))
+                                # Incoming message (Slate Bubble on Left)
+                                draw.rounded_rectangle([(26, y), (290, y + 62)], radius=12, fill=(51, 65, 85))
+                                draw.text((38, y + 8), msg_text[:34], fill=(255, 255, 255))
+                                if len(msg_text) > 34:
+                                    draw.text((38, y + 24), msg_text[34:68], fill=(255, 255, 255))
+                                draw.text((38, y + 42), f"From {msg.get('sender', 'Peer')} • {msg_time}", fill=(148, 163, 184))
                             
-                            y += 75
+                            y += 74
 
-                    # Bottom Chat Input Bar
-                    draw.rectangle([(20, 625), (340, 665)], fill=(30, 41, 59), outline=(71, 85, 105))
-                    draw.text((35, 638), "Type SMS message...", fill=(148, 163, 184))
-                    draw.ellipse([(355, 625), (395, 665)], fill=(2, 132, 199))
-                    draw.text((370, 637), "➤", fill=(255, 255, 255))
+                    # Bottom Input Bar
+                    draw.rounded_rectangle([(24, 645), (355, 685)], radius=18, fill=(30, 41, 59), outline=(71, 85, 105))
+                    draw.text((40, 658), "Type SMS message...", fill=(148, 163, 184))
+                    draw.ellipse([(370, 645), (410, 685)], fill=(2, 132, 199))
+                    draw.text((385, 657), "➤", fill=(255, 255, 255))
 
                 elif "dialer" in self._current_app.lower() or self._in_call:
-                    # Phone Call UI
-                    draw.text((16, 68), "📞 Phone • Ongoing Call", fill=(255, 255, 255))
-                    draw.rectangle([(10, 105), (410, 675)], fill=(15, 23, 42), outline=(51, 65, 85))
+                    draw.text((26, 78), "📞 Phone • Voice Call", fill=(255, 255, 255))
                     
                     # Caller Avatar
-                    draw.ellipse([(160, 150), (260, 250)], fill=(30, 58, 138), outline=(59, 130, 246))
-                    draw.text((195, 185), "👤", fill=(255, 255, 255))
+                    draw.ellipse([(170, 160), (270, 260)], fill=(30, 58, 138), outline=(59, 130, 246), width=2)
+                    draw.text((205, 195), "👤", fill=(255, 255, 255))
                     
-                    # Call Info
+                    # Target Number & Timer
                     target = self._call_target or "555-0002"
-                    draw.text((150, 275), target, fill=(255, 255, 255))
-                    call_state_text = "Call in progress (00:07)" if self._in_call else "Call Ended"
-                    call_state_color = (74, 222, 128) if self._in_call else (248, 113, 113)
-                    draw.text((135, 305), call_state_text, fill=call_state_color)
+                    draw.text((160, 280), target, fill=(255, 255, 255))
+                    call_text = "Call in progress (00:08)" if self._in_call else "Call Ended"
+                    call_color = (74, 222, 128) if self._in_call else (248, 113, 113)
+                    draw.text((140, 310), call_text, fill=call_color)
                     
-                    # Action Buttons Grid
-                    draw.rounded_rectangle([(60, 360), (160, 420)], radius=8, fill=(30, 41, 59))
-                    draw.text((95, 382), "🎤 Mute", fill=(240, 240, 240))
+                    # Call Controls
+                    draw.rounded_rectangle([(65, 370), (165, 430)], radius=10, fill=(30, 41, 59))
+                    draw.text((95, 392), "🎤 Mute", fill=(240, 240, 240))
                     
-                    draw.rounded_rectangle([(180, 360), (280, 420)], radius=8, fill=(30, 41, 59))
-                    draw.text((205, 382), "🔢 Keypad", fill=(240, 240, 240))
+                    draw.rounded_rectangle([(175, 370), (265, 430)], radius=10, fill=(30, 41, 59))
+                    draw.text((195, 392), "🔢 Keypad", fill=(240, 240, 240))
                     
-                    draw.rounded_rectangle([(300, 360), (380, 420)], radius=8, fill=(30, 41, 59))
-                    draw.text((315, 382), "🔊 Speaker", fill=(240, 240, 240))
+                    draw.rounded_rectangle([(275, 370), (375, 430)], radius=10, fill=(30, 41, 59))
+                    draw.text((300, 392), "🔊 Speaker", fill=(240, 240, 240))
                     
                     # End Call Button
-                    draw.ellipse([(175, 540), (245, 610)], fill=(239, 68, 68))
-                    draw.text((200, 565), "☎", fill=(255, 255, 255))
+                    draw.ellipse([(185, 550), (255, 620)], fill=(239, 68, 68))
+                    draw.text((212, 576), "☎", fill=(255, 255, 255))
 
                 else:
-                    # Home Screen UI
-                    draw.text((16, 68), "📱 Android Home Launcher", fill=(255, 255, 255))
-                    draw.rectangle([(10, 105), (410, 675)], fill=(15, 23, 42), outline=(51, 65, 85))
+                    # Home Screen Launcher
+                    draw.text((26, 78), "📱 Android Home Screen", fill=(255, 255, 255))
                     
-                    # Google Search Bar Widget
-                    draw.rounded_rectangle([(30, 140), (390, 185)], radius=20, fill=(30, 41, 59), outline=(71, 85, 105))
-                    draw.text((50, 153), "🔍 Google Search", fill=(148, 163, 184))
+                    # Search Bar
+                    draw.rounded_rectangle([(30, 140), (410, 185)], radius=20, fill=(30, 41, 59), outline=(71, 85, 105))
+                    draw.text((55, 154), "🔍 Google Search", fill=(148, 163, 184))
                     
                     # App Icons Grid
                     icons = [
@@ -350,21 +361,26 @@ class DeviceSession:
                         ("⚙️", "Settings", (100, 116, 139)),
                         ("📁", "Files", (249, 115, 22))
                     ]
-                    
-                    for idx, (icon_sym, app_lbl, color) in enumerate(icons):
-                        row = idx // 3
-                        col = idx % 3
-                        ix = 50 + col * 120
-                        iy = 240 + row * 110
-                        draw.rounded_rectangle([(ix, iy), (ix + 65, iy + 65)], radius=14, fill=color)
-                        draw.text((ix + 20, iy + 18), icon_sym, fill=(255, 255, 255))
-                        draw.text((ix + 5, iy + 72), app_lbl, fill=(203, 213, 225))
+                    for idx, (sym, lbl, col) in enumerate(icons):
+                        r = idx // 3
+                        c = idx % 3
+                        ix = 55 + c * 125
+                        iy = 240 + r * 115
+                        draw.rounded_rectangle([(ix, iy), (ix + 68, iy + 68)], radius=16, fill=col)
+                        draw.text((ix + 22, iy + 20), sym, fill=(255, 255, 255))
+                        draw.text((ix + 10, iy + 76), lbl, fill=(203, 213, 225))
 
-                # 4. Bottom Android Navigation Bar (Back, Home, Recents)
-                draw.rectangle([(0, 690), (420, 750)], fill=(12, 15, 20))
-                draw.text((90, 712), "◀", fill=(160, 160, 160))
-                draw.text((205, 712), "●", fill=(160, 160, 160))
-                draw.text((320, 712), "■", fill=(160, 160, 160))
+                # 4. Top Push Notification Banner (If notification active)
+                if self._notification:
+                    draw.rounded_rectangle([(24, 112), (416, 172)], radius=14, fill=(30, 58, 138), outline=(59, 130, 246), width=2)
+                    draw.text((38, 122), self._notification.get("title", "Notification"), fill=(224, 242, 254))
+                    draw.text((38, 144), self._notification.get("text", "")[:42], fill=(255, 255, 255))
+
+                # 5. Bottom Navigation Bar
+                draw.rectangle([(14, 705), (426, 766)], fill=(12, 15, 20))
+                draw.text((95, 725), "◀", fill=(160, 160, 160))
+                draw.text((215, 725), "●", fill=(160, 160, 160))
+                draw.text((335, 725), "■", fill=(160, 160, 160))
 
                 img.save(target_path)
             else:

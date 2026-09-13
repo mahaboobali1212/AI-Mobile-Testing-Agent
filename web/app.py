@@ -4,6 +4,7 @@ Streamlit Web Dashboard for AI-Powered Multi-Device Mobile Testing Agent.
 
 import os
 import sys
+import json
 from pathlib import Path
 
 # Add project root to sys.path
@@ -25,15 +26,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Dark Modern Dashboard
+# Custom CSS for Premium Modern QA Dashboard
 st.markdown("""
 <style>
-    .reportview-container { background-color: #0f172a; }
-    .main-header { font-size: 28px; font-weight: 800; color: #38bdf8; margin-bottom: 4px; }
-    .sub-header { color: #94a3b8; font-size: 14px; margin-bottom: 20px; }
-    .card { background-color: #1e293b; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #334155; }
+    .main-header { font-size: 30px; font-weight: 800; color: #38bdf8; margin-bottom: 2px; }
+    .sub-header { color: #94a3b8; font-size: 15px; margin-bottom: 22px; }
+    .metric-card { background-color: #1e293b; border-radius: 10px; padding: 16px; border: 1px solid #334155; text-align: center; }
     .metric-value { font-size: 26px; font-weight: bold; color: #f8fafc; }
-    .metric-label { font-size: 13px; color: #94a3b8; }
+    .metric-label { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+    .stButton>button { border-radius: 8px; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,7 +44,7 @@ generator = ScriptGenerator()
 runner = SandboxRunner(dev_mgr)
 analyzer = ResultAnalyzer()
 
-# Sidebar: Device Status & Info
+# Sidebar: Device Pool Status & Config
 with st.sidebar:
     st.markdown("### 📱 Device Pool Status")
     devices = dev_mgr.list_connected_devices()
@@ -54,7 +55,7 @@ with st.sidebar:
         for dev in devices:
             st.markdown(f"• **{dev['serial']}** ({dev['model']})")
     else:
-        st.info("ℹ️ No physical devices connected. Simulation mode active.")
+        st.info("ℹ️ Virtual Device Sandbox active.")
 
     if avds:
         st.markdown("**Installed AVDs:**")
@@ -62,34 +63,46 @@ with st.sidebar:
             st.markdown(f"- 📲 `{avd}`")
 
     st.divider()
-    st.markdown(f"**ADB Path:** `{ADB_PATH}`")
+    st.markdown(f"**ADB Binary:** `{ADB_PATH}`")
     allow_sim = st.checkbox("Allow Virtual Simulation Fallback", value=True)
+    
+    st.divider()
+    st.markdown("### ⚡ Quick Scenario Presets")
+    presets = {
+        "📞 Voice Call & Hangup": "Device A dials Device B (555-0002), Device B answers the call, stay on line for 4s, then Device A terminates the call.",
+        "💬 Two-Way SMS Chat": "Device A sends SMS 'Project presentation at 3 PM' to Device B (555-0002), Device B verifies receipt and replies 'Got it, see you there!' to Device A.",
+        "🌐 Dual Chrome Launch": "Launch Chrome browser on Device A and Device B simultaneously, verify browser is loaded, and return both to home screen.",
+        "🚫 Call Decline Flow": "Device A dials Device B (555-0002), Device B immediately declines the call, verify both devices return to idle state.",
+        "💳 Payment Alert": "Device A sends SMS 'Transaction Alert: $50 received' to Device B (555-0002), Device B verifies notification text and navigates home."
+    }
+    
+    for label, text in presets.items():
+        if st.button(label, use_container_width=True):
+            st.session_state["selected_prompt"] = text
 
 # Main Title
 st.markdown('<div class="main-header">🤖 AI-Powered Multi-Device Mobile Testing Agent</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Author multi-device mobile tests in plain English, execute in isolated sandbox, capture artifacts, and rerun saved test suites.</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Autonomous test authoring from natural language, isolated sandbox execution, real-time artifact collection, and 1-click test reruns.</div>', unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["✨ Generate & Run New Test", "💾 Saved Test Catalog & Rerun", "📊 Test Reports & Artifacts"])
+tab1, tab2, tab3 = st.tabs(["✨ Generate & Run Test", "💾 Saved Test Catalog & Rerun", "📊 Test Reports & History"])
 
 # TAB 1: GENERATE & RUN TEST
 with tab1:
-    col_input, col_code = st.columns([1, 1])
+    col_input, col_code = st.columns([1.1, 0.9])
 
     with col_input:
-        st.markdown("#### 1. Describe Test Scenario")
-        sample_prompts = [
-            "Device A dials Device B (555-0002), Device B answers the call, stay on line for 5s, then Device A hangs up.",
-            "Device A sends an SMS 'Hello Device B' to Device B (555-0002), Device B verifies message received, then replies back.",
-            "Launch Chrome browser on Device A and Device B, verify home screen is loaded, and return both to home."
-        ]
-        selected_sample = st.selectbox("Or choose a pre-built scenario template:", ["Custom"] + sample_prompts)
+        st.markdown("#### 1. Describe Multi-Device Test Scenario")
         
-        default_val = selected_sample if selected_sample != "Custom" else "Device A calls Device B, Device B accepts the call, wait 5 seconds, then Device A ends the call."
-        prompt_text = st.text_area("Test Scenario Prompt (Plain English):", value=default_val, height=130)
+        default_prompt = st.session_state.get("selected_prompt", "Device A sends SMS 'Hello from Device A!' to Device B (555-0002), Device B verifies receipt and replies 'Message received loud and clear' to Device A.")
+        prompt_text = st.text_area("Test Scenario Prompt (Plain English):", value=default_prompt, height=130)
         
-        custom_test_name = st.text_input("Custom Test Name (Optional):", placeholder="e.g. test_voice_call_flow")
-        
-        run_btn = st.button("🚀 Generate & Execute Test in Sandbox", type="primary", use_container_width=True)
+        col_name, col_btn = st.columns([1, 1])
+        with col_name:
+            custom_test_name = st.text_input("Custom Test Name (Optional):", placeholder="e.g. test_sms_flow")
+        with col_btn:
+            st.write("")
+            st.write("")
+            run_btn = st.button("🚀 Generate & Run Test in Sandbox", type="primary", use_container_width=True)
 
     if run_btn and prompt_text:
         with st.spinner("🤖 Generating deterministic Python test script with AI..."):
@@ -101,7 +114,7 @@ with tab1:
             st.code(code, language="python")
 
         st.markdown("---")
-        st.markdown("#### 3. Sandbox Execution & Live Artifacts")
+        st.markdown("#### 3. Sandbox Execution & Dual-Device Live Timeline")
         progress_bar = st.progress(0, text="Executing in Sandbox...")
 
         with st.spinner("⚡ Running test script in sandbox..."):
@@ -109,22 +122,24 @@ with tab1:
             report_path = analyzer.analyze_and_report(summary)
             progress_bar.progress(100, text="Execution Complete!")
 
-        # Display Result Card
+        # Display Metrics Cards
         is_pass = summary.get("status") == "PASSED"
         status_color = "#10b981" if is_pass else "#ef4444"
         
-        st.markdown(f"""
-        <div style="background-color: #1e293b; border-left: 6px solid {status_color}; padding: 16px; border-radius: 8px; margin-top: 10px;">
-            <h3 style="margin: 0; color: {status_color};">Status: {summary.get('status')}</h3>
-            <p style="margin: 4px 0 0 0; color: #94a3b8;">Total Duration: {summary.get('total_duration')}s | Steps: {len(summary.get('steps', []))}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.markdown(f'<div class="metric-card"><div class="metric-value" style="color: {status_color};">{summary.get("status")}</div><div class="metric-label">Test Outcome</div></div>', unsafe_allow_html=True)
+        with m2:
+            st.markdown(f'<div class="metric-card"><div class="metric-value">{summary.get("total_duration")}s</div><div class="metric-label">Total Duration</div></div>', unsafe_allow_html=True)
+        with m3:
+            st.markdown(f'<div class="metric-card"><div class="metric-value">{len(summary.get("steps", []))}</div><div class="metric-label">Steps Executed</div></div>', unsafe_allow_html=True)
+        with m4:
+            st.markdown(f'<div class="metric-card"><div class="metric-value">{len(summary.get("devices", {}))}</div><div class="metric-label">Devices Tested</div></div>', unsafe_allow_html=True)
 
         if not is_pass and summary.get("ai_diagnosis"):
             st.error(summary["ai_diagnosis"])
 
-        # Display Step-by-Step Screenshots
-        st.markdown("##### 📸 Execution Screenshots & Timeline")
+        st.markdown("##### 📸 Step-by-Step Device Screen Comparison")
         steps = summary.get("steps", [])
         for step in steps:
             with st.expander(f"Step {step['step_index']}: {step['name']} ({step['status']} - {step['duration']}s)", expanded=True):
@@ -136,47 +151,66 @@ with tab1:
                             with cols[idx]:
                                 st.image(str(img_path), caption=s_name, use_container_width=True)
 
-        st.info(f"📄 Full interactive HTML report generated at: `{report_path}`")
+        # Download Report button
+        if report_path.exists():
+            with open(report_path, "r", encoding="utf-8") as rf:
+                report_html = rf.read()
+            st.download_button(
+                label="⬇️ Download Standalone Self-Contained HTML Report",
+                data=report_html,
+                file_name=f"{summary.get('run_name', 'test')}_report.html",
+                mime="text/html",
+                type="secondary"
+            )
 
 # TAB 2: SAVED TEST CATALOG & RERUN
 with tab2:
-    st.markdown("#### 💾 Saved Reusable Tests")
+    st.markdown("#### 💾 Saved Reusable Test Catalog")
     st.caption("Re-run any previously generated test on-demand in the Sandbox without making any AI calls.")
 
-    saved_tests = list(TESTS_GENERATED_DIR.glob("test_*.py"))
+    saved_tests = sorted(list(TESTS_GENERATED_DIR.glob("test_*.py")), reverse=True)
     if not saved_tests:
         st.info("No saved test scripts found yet. Generate one in Tab 1!")
     else:
-        selected_script = st.selectbox("Select Saved Test Script:", saved_tests, format_func=lambda p: p.name)
+        selected_script = st.selectbox("Select Saved Test Script to Inspect & Run:", saved_tests, format_func=lambda p: p.name)
         
-        col_view, col_action = st.columns([2, 1])
+        col_view, col_action = st.columns([1.2, 0.8])
         with col_view:
             with open(selected_script, "r", encoding="utf-8") as f:
                 content = f.read()
             st.code(content, language="python")
 
         with col_action:
-            st.markdown("##### Actions")
+            st.markdown("##### Execute Test")
+            st.markdown(f"**Script:** `{selected_script.name}`")
+            st.markdown(f"**Size:** {selected_script.stat().st_size} bytes")
             if st.button("▶️ Rerun Test in Sandbox", type="primary", use_container_width=True):
                 with st.spinner(f"Running `{selected_script.name}` in sandbox..."):
                     summary = runner.run_script(selected_script, allow_simulation=allow_sim)
                     report_path = analyzer.analyze_and_report(summary)
                     
                 st.success(f"Execution {summary.get('status')} in {summary.get('total_duration')}s!")
-                st.info(f"Report: `{report_path.name}`")
+                if report_path.exists():
+                    with open(report_path, "r", encoding="utf-8") as rf:
+                        report_html = rf.read()
+                    st.download_button(
+                        label="⬇️ Download Run Report",
+                        data=report_html,
+                        file_name=f"{selected_script.stem}_report.html",
+                        mime="text/html"
+                    )
 
-# TAB 3: TEST REPORTS & ARTIFACTS
+# TAB 3: TEST REPORTS & HISTORY
 with tab3:
     st.markdown("#### 📊 Historical Test Runs & Reports")
     runs = sorted(list(ARTIFACTS_DIR.glob("run_*")), reverse=True)
     if not runs:
         st.info("No test runs recorded yet.")
     else:
-        for run in runs[:10]:
+        for run in runs[:15]:
             sum_file = run / "summary.json"
             rep_file = run / "report.html"
             if sum_file.exists():
-                import json
                 with open(sum_file, "r", encoding="utf-8") as f:
                     s_data = json.load(f)
                 
@@ -193,8 +227,9 @@ with tab3:
                         with open(rep_file, "r", encoding="utf-8") as rf:
                             html_text = rf.read()
                         st.download_button(
-                            label="⬇️ Download HTML Report",
+                            label="⬇️ Download Self-Contained HTML Report",
                             data=html_text,
                             file_name=f"{run.name}_report.html",
-                            mime="text/html"
+                            mime="text/html",
+                            key=f"dl_{run.name}"
                         )
