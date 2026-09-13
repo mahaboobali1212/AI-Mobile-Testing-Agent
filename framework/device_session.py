@@ -1,9 +1,10 @@
 """
 DeviceSession: Encapsulates high-level automation actions for an individual Android device.
-Supports both live ADB execution and ultra-high-fidelity simulated sandbox visual rendering with phone bezels and anti-aliased typography.
+Supports both live ADB execution and ultra-high-fidelity simulated sandbox visual rendering with genuine vector brand logos, phone bezels, and anti-aliased typography.
 """
 
 import os
+import math
 import subprocess
 import time
 from pathlib import Path
@@ -32,6 +33,138 @@ def _get_font(size: int, bold: bool = False):
                 pass
     return ImageFont.load_default()
 
+
+# ==========================================
+# VECTOR LOGO & ICON DRAWING HELPERS
+# ==========================================
+
+def _draw_chrome_logo(draw: ImageDraw.Draw, cx: int, cy: int, r: int = 20):
+    """Draws authentic 4-color Google Chrome circular logo."""
+    # Red top, Yellow bottom-left, Green bottom-right sectors
+    draw.pieslice([(cx - r, cy - r), (cx + r, cy + r)], start=210, end=330, fill=(234, 67, 53))   # Red
+    draw.pieslice([(cx - r, cy - r), (cx + r, cy + r)], start=330, end=90, fill=(52, 168, 83))    # Green
+    draw.pieslice([(cx - r, cy - r), (cx + r, cy + r)], start=90, end=210, fill=(251, 188, 4))    # Yellow
+    
+    # White separator ring
+    inner_r = int(r * 0.55)
+    draw.ellipse([(cx - inner_r, cy - inner_r), (cx + inner_r, cy + inner_r)], fill=(255, 255, 255))
+    
+    # Blue center circle
+    core_r = int(r * 0.42)
+    draw.ellipse([(cx - core_r, cy - core_r), (cx + core_r, cy + core_r)], fill=(66, 133, 244))
+
+
+def _draw_phone_handset_logo(draw: ImageDraw.Draw, cx: int, cy: int, size: int = 16, color=(255, 255, 255), facing_down: bool = False):
+    """Draws a vector telephone handset icon."""
+    if facing_down:
+        # End call (Handset facing down horizontally)
+        draw.rounded_rectangle([(cx - size, cy - 4), (cx + size, cy + 4)], radius=4, fill=color)
+        draw.rounded_rectangle([(cx - size, cy - 8), (cx - size + 7, cy + 8)], radius=3, fill=color)
+        draw.rounded_rectangle([(cx + size - 7, cy - 8), (cx + size, cy + 8)], radius=3, fill=color)
+    else:
+        # Standard active/app handset (Angled handset)
+        draw.pieslice([(cx - size, cy - size), (cx + size, cy + size)], start=120, end=240, fill=color, outline=color, width=2)
+        draw.ellipse([(cx - size + 2, cy - size + 4), (cx - 2, cy - 2)], fill=color)
+        draw.ellipse([(cx - size + 2, cy + 2), (cx - 2, cy + size - 4)], fill=color)
+
+
+def _draw_messages_bubble_logo(draw: ImageDraw.Draw, cx: int, cy: int, size: int = 16, color=(255, 255, 255)):
+    """Draws a vector chat speech bubble logo."""
+    w, h = size + 4, size
+    draw.rounded_rectangle([(cx - w // 2, cy - h // 2), (cx + w // 2, cy + h // 2)], radius=6, fill=color)
+    # Speech bubble pointer tail
+    draw.polygon([(cx - w // 2 + 4, cy + h // 2 - 2), (cx - w // 2 - 4, cy + h // 2 + 5), (cx - w // 2 + 10, cy + h // 2 - 2)], fill=color)
+    # Internal message dots/lines
+    line_col = (59, 130, 246)
+    draw.line([(cx - 6, cy - 2), (cx + 6, cy - 2)], fill=line_col, width=2)
+    draw.line([(cx - 6, cy + 3), (cx + 2, cy + 3)], fill=line_col, width=2)
+
+
+def _draw_camera_lens_logo(draw: ImageDraw.Draw, cx: int, cy: int, size: int = 16):
+    """Draws a vector camera logo."""
+    # Camera body
+    draw.rounded_rectangle([(cx - size, cy - size + 4), (cx + size, cy + size - 2)], radius=5, fill=(255, 255, 255))
+    # Top flash ridge
+    draw.rounded_rectangle([(cx - 6, cy - size + 1), (cx + 6, cy - size + 4)], radius=2, fill=(255, 255, 255))
+    # Circular Lens
+    draw.ellipse([(cx - 8, cy - 5), (cx + 8, cy + 9)], fill=(168, 85, 247), outline=(255, 255, 255), width=2)
+    # Lens reflection dot
+    draw.ellipse([(cx - 3, cy), (cx + 1, cy + 4)], fill=(255, 255, 255))
+    # Red sensor dot
+    draw.ellipse([(cx + size - 7, cy - size + 7), (cx + size - 3, cy - size + 11)], fill=(239, 68, 68))
+
+
+def _draw_settings_gear_logo(draw: ImageDraw.Draw, cx: int, cy: int, r: int = 14):
+    """Draws a vector mechanical settings cogwheel gear."""
+    # Radial teeth
+    for angle in range(0, 360, 45):
+        rad = math.radians(angle)
+        tx = cx + int((r + 4) * math.cos(rad))
+        ty = cy + int((r + 4) * math.sin(rad))
+        draw.ellipse([(tx - 3, ty - 3), (tx + 3, ty + 3)], fill=(255, 255, 255))
+    # Gear body
+    draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill=(255, 255, 255))
+    # Central hole
+    draw.ellipse([(cx - r // 2, cy - r // 2), (cx + r // 2, cy + r // 2)], fill=(100, 116, 139))
+
+
+def _draw_files_folder_logo(draw: ImageDraw.Draw, cx: int, cy: int, size: int = 16):
+    """Draws a vector files folder icon."""
+    draw.polygon([(cx - size, cy - size + 4), (cx - 4, cy - size + 4), (cx, cy - size + 8), (cx + size, cy - size + 8), (cx + size, cy + size - 4), (cx - size, cy + size - 4)], fill=(255, 255, 255))
+    draw.rounded_rectangle([(cx - size, cy - 2), (cx + size, cy + size - 4)], radius=3, fill=(254, 215, 170))
+
+
+def _draw_google_g_logo(draw: ImageDraw.Draw, cx: int, cy: int, r: int = 11):
+    """Draws the official Google 'G' 4-color vector logo."""
+    draw.pieslice([(cx - r, cy - r), (cx + r, cy + r)], start=225, end=340, fill=(234, 67, 53))   # Red
+    draw.pieslice([(cx - r, cy - r), (cx + r, cy + r)], start=340, end=45, fill=(66, 133, 244))    # Blue
+    draw.pieslice([(cx - r, cy - r), (cx + r, cy + r)], start=45, end=140, fill=(52, 168, 83))     # Green
+    draw.pieslice([(cx - r, cy - r), (cx + r, cy + r)], start=140, end=225, fill=(251, 188, 4))    # Yellow
+    # Inner hole
+    inner_r = int(r * 0.60)
+    draw.ellipse([(cx - inner_r, cy - inner_r), (cx + inner_r, cy + inner_r)], fill=(30, 41, 59))
+    # Horizontal blue crossbar
+    draw.rectangle([(cx, cy - 3), (cx + r, cy + 3)], fill=(66, 133, 244))
+
+
+def _draw_person_avatar_logo(draw: ImageDraw.Draw, cx: int, cy: int, r: int = 35):
+    """Draws a vector person silhouette avatar for calls and contacts."""
+    # Head
+    draw.ellipse([(cx - int(r * 0.35), cy - int(r * 0.55)), (cx + int(r * 0.35), cy + int(r * 0.05))], fill=(255, 255, 255))
+    # Shoulders
+    draw.pieslice([(cx - int(r * 0.70), cy - int(r * 0.1)), (cx + int(r * 0.70), cy + int(r * 0.85))], start=180, end=360, fill=(255, 255, 255))
+
+
+def _draw_microphone_logo(draw: ImageDraw.Draw, cx: int, cy: int):
+    """Draws a vector microphone icon."""
+    draw.rounded_rectangle([(cx - 4, cy - 10), (cx + 4, cy + 2)], radius=4, fill=(240, 240, 240))
+    draw.arc([(cx - 7, cy - 6), (cx + 7, cy + 5)], start=0, end=180, fill=(240, 240, 240), width=2)
+    draw.line([(cx, cy + 5), (cx, cy + 10)], fill=(240, 240, 240), width=2)
+
+
+def _draw_keypad_logo(draw: ImageDraw.Draw, cx: int, cy: int):
+    """Draws a 3x3 numeric dialpad dots icon."""
+    for row in range(-1, 2):
+        for col in range(-1, 2):
+            dx = cx + col * 7
+            dy = cy + row * 7
+            draw.ellipse([(dx - 2, dy - 2), (dx + 2, dy + 2)], fill=(240, 240, 240))
+
+
+def _draw_speaker_logo(draw: ImageDraw.Draw, cx: int, cy: int):
+    """Draws a vector audio speaker icon."""
+    draw.polygon([(cx - 8, cy - 4), (cx - 4, cy - 4), (cx + 2, cy - 9), (cx + 2, cy + 9), (cx - 4, cy + 4), (cx - 8, cy + 4)], fill=(240, 240, 240))
+    draw.arc([(cx + 4, cy - 6), (cx + 10, cy + 6)], start=300, end=60, fill=(240, 240, 240), width=2)
+
+
+def _draw_paperplane_logo(draw: ImageDraw.Draw, cx: int, cy: int):
+    """Draws a paper airplane send vector icon."""
+    draw.polygon([(cx - 8, cy - 8), (cx + 9, cy), (cx - 8, cy + 8), (cx - 3, cy)], fill=(255, 255, 255))
+
+
+# ==========================================
+# DEVICE SESSION ENGINE
+# ==========================================
 
 class DeviceSession:
     def __init__(self, serial: str, alias: str = "device", is_simulated: bool = False, screenshot_dir: Optional[Path] = None):
@@ -273,9 +406,9 @@ class DeviceSession:
 
         if self.is_simulated:
             if HAS_PIL:
-                # Load anti-aliased TrueType fonts
-                f_title = _get_font(18, bold=True)
-                f_sub = _get_font(14, bold=True)
+                # Typography
+                f_title = _get_font(20, bold=True)
+                f_sub = _get_font(15, bold=True)
                 f_body = _get_font(13, bold=False)
                 f_bold = _get_font(13, bold=True)
                 f_small = _get_font(11, bold=False)
@@ -284,7 +417,7 @@ class DeviceSession:
                 img = Image.new("RGB", (440, 780), color=(10, 14, 20))
                 draw = ImageDraw.Draw(img)
                 
-                # Outer Phone Chassis
+                # Outer Curved Phone Frame
                 draw.rounded_rectangle([(6, 6), (434, 774)], radius=24, fill=(18, 24, 34), outline=(71, 85, 105), width=2)
                 draw.rounded_rectangle([(14, 14), (426, 766)], radius=18, fill=(15, 23, 42))
 
@@ -300,9 +433,11 @@ class DeviceSession:
                 dev_badge = f"{self.alias.upper()} ({self.serial})"
                 draw.text((26, 56), dev_badge, fill=(56, 189, 248), font=f_sub)
 
-                # 3. Dynamic App View
+                # 3. Dynamic App View with Genuine Vector Brand Logos
                 if "messaging" in self._current_app.lower():
-                    draw.text((26, 78), "Messages  |  Chat", fill=(255, 255, 255), font=f_body)
+                    # Header with Vector Messages Bubble Logo
+                    _draw_messages_bubble_logo(draw, 36, 86, size=14, color=(59, 130, 246))
+                    draw.text((54, 78), "Google Messages", fill=(255, 255, 255), font=f_bold)
                     
                     # Conversation area
                     y = 120
@@ -320,7 +455,7 @@ class DeviceSession:
                                 draw.text((144, y + 8), msg_text[:36], fill=(255, 255, 255), font=f_bold)
                                 if len(msg_text) > 36:
                                     draw.text((144, y + 24), msg_text[36:72], fill=(255, 255, 255), font=f_body)
-                                draw.text((280, y + 42), f"{msg_time}  Sent", fill=(224, 242, 254), font=f_small)
+                                draw.text((280, y + 42), f"{msg_time}  Delivered", fill=(224, 242, 254), font=f_small)
                             else:
                                 # Incoming message (Slate Bubble on Left)
                                 draw.rounded_rectangle([(26, y), (300, y + 62)], radius=12, fill=(51, 65, 85))
@@ -331,70 +466,82 @@ class DeviceSession:
                             
                             y += 74
 
-                    # Bottom Input Bar
+                    # Bottom Input Bar with Send Paperplane Logo
                     draw.rounded_rectangle([(24, 645), (355, 685)], radius=18, fill=(30, 41, 59), outline=(71, 85, 105))
                     draw.text((40, 658), "Type message...", fill=(148, 163, 184), font=f_body)
                     draw.ellipse([(370, 645), (410, 685)], fill=(2, 132, 199))
-                    draw.text((384, 656), ">", fill=(255, 255, 255), font=f_sub)
+                    _draw_paperplane_logo(draw, 390, 665)
 
                 elif "dialer" in self._current_app.lower() or self._in_call:
-                    draw.text((26, 78), "Phone  |  Voice Call", fill=(255, 255, 255), font=f_body)
+                    # Phone Call Header with Vector Handset Logo
+                    _draw_phone_handset_logo(draw, 36, 86, size=8, color=(34, 197, 94))
+                    draw.text((52, 78), "Phone  |  Voice Call", fill=(255, 255, 255), font=f_bold)
                     
-                    # Caller Avatar Circle with initial
-                    draw.ellipse([(170, 160), (270, 260)], fill=(30, 58, 138), outline=(59, 130, 246), width=2)
-                    draw.text((210, 192), self.alias[-1].upper(), fill=(255, 255, 255), font=f_title)
+                    # Large Silhouette Caller Avatar
+                    draw.ellipse([(160, 140), (280, 260)], fill=(30, 58, 138), outline=(59, 130, 246), width=2)
+                    _draw_person_avatar_logo(draw, 220, 200, r=40)
                     
-                    # Target Number & Timer
+                    # Target Number & Live Status
                     target = self._call_target or "555-0002"
-                    draw.text((170, 280), target, fill=(255, 255, 255), font=f_sub)
+                    draw.text((170, 280), target, fill=(255, 255, 255), font=f_title)
                     call_text = "Connected (00:08)" if self._in_call else "Call Ended"
                     call_color = (74, 222, 128) if self._in_call else (248, 113, 113)
-                    draw.text((160, 310), call_text, fill=call_color, font=f_body)
+                    draw.text((160, 312), call_text, fill=call_color, font=f_sub)
                     
-                    # Call Action Buttons
-                    draw.rounded_rectangle([(65, 370), (165, 430)], radius=10, fill=(30, 41, 59))
-                    draw.text((95, 392), "Mute", fill=(240, 240, 240), font=f_body)
+                    # Vector Call Control Action Buttons
+                    # 1. Mute
+                    draw.rounded_rectangle([(65, 370), (155, 435)], radius=12, fill=(30, 41, 59))
+                    _draw_microphone_logo(draw, 110, 395)
+                    draw.text((95, 412), "Mute", fill=(240, 240, 240), font=f_small)
                     
-                    draw.rounded_rectangle([(175, 370), (265, 430)], radius=10, fill=(30, 41, 59))
-                    draw.text((195, 392), "Keypad", fill=(240, 240, 240), font=f_body)
+                    # 2. Keypad
+                    draw.rounded_rectangle([(175, 370), (265, 435)], radius=12, fill=(30, 41, 59))
+                    _draw_keypad_logo(draw, 220, 395)
+                    draw.text((200, 412), "Keypad", fill=(240, 240, 240), font=f_small)
                     
-                    draw.rounded_rectangle([(275, 370), (375, 430)], radius=10, fill=(30, 41, 59))
-                    draw.text((300, 392), "Speaker", fill=(240, 240, 240), font=f_body)
+                    # 3. Speaker
+                    draw.rounded_rectangle([(285, 370), (375, 435)], radius=12, fill=(30, 41, 59))
+                    _draw_speaker_logo(draw, 330, 395)
+                    draw.text((310, 412), "Speaker", fill=(240, 240, 240), font=f_small)
                     
-                    # End Call Button
-                    draw.rounded_rectangle([(160, 550), (280, 610)], radius=16, fill=(239, 68, 68))
-                    draw.text((185, 570), "END CALL", fill=(255, 255, 255), font=f_sub)
+                    # End Call Button (Red Circle with Handset Facing Down)
+                    draw.ellipse([(185, 540), (255, 610)], fill=(239, 68, 68))
+                    _draw_phone_handset_logo(draw, 220, 575, size=16, color=(255, 255, 255), facing_down=True)
+                    draw.text((188, 620), "END CALL", fill=(239, 68, 68), font=f_bold)
 
                 else:
-                    # Home Screen Launcher
-                    draw.text((26, 78), "Android Home Screen", fill=(255, 255, 255), font=f_body)
+                    # Home Screen Launcher with Genuine App Vector Logos
+                    draw.text((26, 78), "Android Home Screen", fill=(255, 255, 255), font=f_bold)
                     
-                    # Search Bar
-                    draw.rounded_rectangle([(30, 140), (410, 185)], radius=20, fill=(30, 41, 59), outline=(71, 85, 105))
-                    draw.text((55, 154), "Search Google", fill=(148, 163, 184), font=f_body)
+                    # Google Search Bar with 'G' Multi-Color Logo
+                    draw.rounded_rectangle([(30, 140), (410, 185)], radius=22, fill=(30, 41, 59), outline=(71, 85, 105))
+                    _draw_google_g_logo(draw, 55, 162, r=12)
+                    draw.text((80, 154), "Search or type URL", fill=(148, 163, 184), font=f_body)
                     
-                    # App Tiles Grid
-                    apps = [
-                        ("PHONE", (34, 197, 94)),
-                        ("MESSAGES", (59, 130, 246)),
-                        ("CHROME", (234, 179, 8)),
-                        ("CAMERA", (168, 85, 247)),
-                        ("SETTINGS", (100, 116, 139)),
-                        ("FILES", (249, 115, 22))
+                    # Vector App Icons Grid (Phone, Messages, Chrome, Camera, Settings, Files)
+                    app_data = [
+                        ("Phone", (34, 197, 94), lambda d, x, y: _draw_phone_handset_logo(d, x, y, size=14)),
+                        ("Messages", (59, 130, 246), lambda d, x, y: _draw_messages_bubble_logo(d, x, y, size=15)),
+                        ("Chrome", (255, 255, 255), lambda d, x, y: _draw_chrome_logo(d, x, y, r=16)),
+                        ("Camera", (168, 85, 247), lambda d, x, y: _draw_camera_lens_logo(d, x, y, size=15)),
+                        ("Settings", (100, 116, 139), lambda d, x, y: _draw_settings_gear_logo(d, x, y, r=13)),
+                        ("Files", (249, 115, 22), lambda d, x, y: _draw_files_folder_logo(d, x, y, size=15))
                     ]
-                    for idx, (lbl, col) in enumerate(apps):
+                    
+                    for idx, (lbl, bg_col, draw_fn) in enumerate(app_data):
                         r = idx // 3
                         c = idx % 3
                         ix = 55 + c * 125
                         iy = 240 + r * 115
-                        draw.rounded_rectangle([(ix, iy), (ix + 70, iy + 70)], radius=16, fill=col)
-                        draw.text((ix + 12, iy + 26), lbl[:4], fill=(255, 255, 255), font=f_bold)
-                        draw.text((ix + 6, iy + 76), lbl, fill=(203, 213, 225), font=f_small)
+                        draw.rounded_rectangle([(ix, iy), (ix + 68, iy + 68)], radius=16, fill=bg_col)
+                        draw_fn(draw, ix + 34, iy + 34)
+                        draw.text((ix + 12, iy + 76), lbl, fill=(203, 213, 225), font=f_small)
 
                 # 4. Top Notification Banner (If active)
                 if self._notification:
                     draw.rounded_rectangle([(24, 112), (416, 172)], radius=14, fill=(30, 58, 138), outline=(59, 130, 246), width=2)
-                    draw.text((38, 122), self._notification.get("title", "NOTIFICATION"), fill=(224, 242, 254), font=f_bold)
+                    _draw_messages_bubble_logo(draw, 42, 132, size=10, color=(255, 255, 255))
+                    draw.text((60, 122), self._notification.get("title", "NOTIFICATION"), fill=(224, 242, 254), font=f_bold)
                     draw.text((38, 144), self._notification.get("text", "")[:45], fill=(255, 255, 255), font=f_body)
 
                 # 5. Bottom Navigation Bar
