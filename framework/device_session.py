@@ -1,6 +1,6 @@
 """
 DeviceSession: Encapsulates high-level automation actions for an individual Android device.
-Supports both live ADB execution and ultra-high-fidelity simulated sandbox visual rendering with phone bezels and notifications.
+Supports both live ADB execution and ultra-high-fidelity simulated sandbox visual rendering with phone bezels and anti-aliased typography.
 """
 
 import os
@@ -15,6 +15,22 @@ except ImportError:
     HAS_PIL = False
 
 from config import ADB_PATH
+
+
+def _get_font(size: int, bold: bool = False):
+    """Loads clean anti-aliased TrueType fonts on Windows/Linux or falls back to default."""
+    if not HAS_PIL:
+        return None
+    font_names = ["arialbd.ttf" if bold else "arial.ttf", "segoeuib.ttf" if bold else "segoeui.ttf", "calibrib.ttf" if bold else "calibri.ttf"]
+    for fn in font_names:
+        try:
+            return ImageFont.truetype(fn, size)
+        except Exception:
+            try:
+                return ImageFont.truetype(f"C:\\Windows\\Fonts\\{fn}", size)
+            except Exception:
+                pass
+    return ImageFont.load_default()
 
 
 class DeviceSession:
@@ -70,7 +86,7 @@ class DeviceSession:
                 peer._in_call = True
                 peer._call_target = self.serial
                 peer._current_app = "com.google.android.dialer"
-                peer._notification = {"title": "📞 Incoming Call", "text": f"From {self.alias.upper()} ({self.serial})"}
+                peer._notification = {"title": "INCOMING CALL", "text": f"Calling from {self.alias.upper()} ({self.serial})"}
                 peer._screen_text = ["Incoming Call...", f"From: {self.serial}", "Answer", "Decline"]
             time.sleep(0.5)
             return True
@@ -146,7 +162,7 @@ class DeviceSession:
                     "time": time.strftime("%I:%M %p")
                 })
                 peer._notification = {
-                    "title": f"💬 Message from {self.alias.upper()}",
+                    "title": f"NEW SMS FROM {self.alias.upper()}",
                     "text": text
                 }
                 peer._screen_text.append(text)
@@ -162,7 +178,7 @@ class DeviceSession:
         self._log_action(f"Opening app: {package_name}")
         if self.is_simulated:
             self._current_app = package_name
-            self._notification = None  # Clear notification when user opens app
+            self._notification = None  # Clear notification when app opens
             if "messaging" in package_name:
                 self._screen_text = ["Messages", "Conversations", "Start chat"] + [m["text"] for m in self._messages]
             elif "chrome" in package_name:
@@ -257,36 +273,41 @@ class DeviceSession:
 
         if self.is_simulated:
             if HAS_PIL:
-                # 440 x 780 Phone Canvas with Device Bezel
+                # Load anti-aliased TrueType fonts
+                f_title = _get_font(18, bold=True)
+                f_sub = _get_font(14, bold=True)
+                f_body = _get_font(13, bold=False)
+                f_bold = _get_font(13, bold=True)
+                f_small = _get_font(11, bold=False)
+
+                # 440 x 780 Phone Canvas
                 img = Image.new("RGB", (440, 780), color=(10, 14, 20))
                 draw = ImageDraw.Draw(img)
                 
-                # Outer Phone Chassis (Metallic curved border)
+                # Outer Phone Chassis
                 draw.rounded_rectangle([(6, 6), (434, 774)], radius=24, fill=(18, 24, 34), outline=(71, 85, 105), width=2)
-                
-                # Screen Inner Display
                 draw.rounded_rectangle([(14, 14), (426, 766)], radius=18, fill=(15, 23, 42))
 
-                # Punch-hole Selfie Camera Dot (Top Center)
+                # Punch-hole Camera Dot
                 draw.ellipse([(212, 22), (228, 38)], fill=(5, 5, 8))
 
-                # 1. Status Bar (Top)
-                draw.text((28, 24), "12:00", fill=(240, 240, 240))
-                draw.text((320, 24), "📶 5G 🔋 98%", fill=(200, 200, 200))
+                # 1. Top Status Bar
+                draw.text((28, 22), "12:00", fill=(240, 240, 240), font=f_small)
+                draw.text((320, 22), "5G  100%", fill=(200, 200, 200), font=f_small)
 
-                # 2. App Header Card
+                # 2. Top Header Bar
                 draw.rectangle([(14, 48), (426, 105)], fill=(30, 41, 59))
-                dev_badge = f"📱 {self.alias.upper()} • {self.serial}"
-                draw.text((26, 56), dev_badge, fill=(56, 189, 248))
+                dev_badge = f"{self.alias.upper()} ({self.serial})"
+                draw.text((26, 56), dev_badge, fill=(56, 189, 248), font=f_sub)
 
-                # 3. Dynamic App View Rendering
+                # 3. Dynamic App View
                 if "messaging" in self._current_app.lower():
-                    draw.text((26, 78), "💬 Messages • Active Chat", fill=(255, 255, 255))
+                    draw.text((26, 78), "Messages  |  Chat", fill=(255, 255, 255), font=f_body)
                     
                     # Conversation area
                     y = 120
                     if not self._messages:
-                        draw.text((36, y), "No recent messages in conversation", fill=(148, 163, 184))
+                        draw.text((36, y), "No messages in conversation", fill=(148, 163, 184), font=f_body)
                     else:
                         for msg in self._messages[-4:]:
                             is_out = msg.get("direction") == "out"
@@ -295,92 +316,92 @@ class DeviceSession:
                             
                             if is_out:
                                 # Outgoing message (Blue Bubble on Right)
-                                draw.rounded_rectangle([(140, y), (410, y + 62)], radius=12, fill=(2, 132, 199))
-                                draw.text((152, y + 8), msg_text[:34], fill=(255, 255, 255))
-                                if len(msg_text) > 34:
-                                    draw.text((152, y + 24), msg_text[34:68], fill=(255, 255, 255))
-                                draw.text((285, y + 42), f"{msg_time} • Sent ✓✓", fill=(224, 242, 254))
+                                draw.rounded_rectangle([(130, y), (410, y + 62)], radius=12, fill=(2, 132, 199))
+                                draw.text((144, y + 8), msg_text[:36], fill=(255, 255, 255), font=f_bold)
+                                if len(msg_text) > 36:
+                                    draw.text((144, y + 24), msg_text[36:72], fill=(255, 255, 255), font=f_body)
+                                draw.text((280, y + 42), f"{msg_time}  Sent", fill=(224, 242, 254), font=f_small)
                             else:
                                 # Incoming message (Slate Bubble on Left)
-                                draw.rounded_rectangle([(26, y), (290, y + 62)], radius=12, fill=(51, 65, 85))
-                                draw.text((38, y + 8), msg_text[:34], fill=(255, 255, 255))
-                                if len(msg_text) > 34:
-                                    draw.text((38, y + 24), msg_text[34:68], fill=(255, 255, 255))
-                                draw.text((38, y + 42), f"From {msg.get('sender', 'Peer')} • {msg_time}", fill=(148, 163, 184))
+                                draw.rounded_rectangle([(26, y), (300, y + 62)], radius=12, fill=(51, 65, 85))
+                                draw.text((38, y + 8), msg_text[:36], fill=(255, 255, 255), font=f_bold)
+                                if len(msg_text) > 36:
+                                    draw.text((38, y + 24), msg_text[36:72], fill=(255, 255, 255), font=f_body)
+                                draw.text((38, y + 42), f"From {msg.get('sender', 'Peer')}  {msg_time}", fill=(148, 163, 184), font=f_small)
                             
                             y += 74
 
                     # Bottom Input Bar
                     draw.rounded_rectangle([(24, 645), (355, 685)], radius=18, fill=(30, 41, 59), outline=(71, 85, 105))
-                    draw.text((40, 658), "Type SMS message...", fill=(148, 163, 184))
+                    draw.text((40, 658), "Type message...", fill=(148, 163, 184), font=f_body)
                     draw.ellipse([(370, 645), (410, 685)], fill=(2, 132, 199))
-                    draw.text((385, 657), "➤", fill=(255, 255, 255))
+                    draw.text((384, 656), ">", fill=(255, 255, 255), font=f_sub)
 
                 elif "dialer" in self._current_app.lower() or self._in_call:
-                    draw.text((26, 78), "📞 Phone • Voice Call", fill=(255, 255, 255))
+                    draw.text((26, 78), "Phone  |  Voice Call", fill=(255, 255, 255), font=f_body)
                     
-                    # Caller Avatar
+                    # Caller Avatar Circle with initial
                     draw.ellipse([(170, 160), (270, 260)], fill=(30, 58, 138), outline=(59, 130, 246), width=2)
-                    draw.text((205, 195), "👤", fill=(255, 255, 255))
+                    draw.text((210, 192), self.alias[-1].upper(), fill=(255, 255, 255), font=f_title)
                     
                     # Target Number & Timer
                     target = self._call_target or "555-0002"
-                    draw.text((160, 280), target, fill=(255, 255, 255))
-                    call_text = "Call in progress (00:08)" if self._in_call else "Call Ended"
+                    draw.text((170, 280), target, fill=(255, 255, 255), font=f_sub)
+                    call_text = "Connected (00:08)" if self._in_call else "Call Ended"
                     call_color = (74, 222, 128) if self._in_call else (248, 113, 113)
-                    draw.text((140, 310), call_text, fill=call_color)
+                    draw.text((160, 310), call_text, fill=call_color, font=f_body)
                     
-                    # Call Controls
+                    # Call Action Buttons
                     draw.rounded_rectangle([(65, 370), (165, 430)], radius=10, fill=(30, 41, 59))
-                    draw.text((95, 392), "🎤 Mute", fill=(240, 240, 240))
+                    draw.text((95, 392), "Mute", fill=(240, 240, 240), font=f_body)
                     
                     draw.rounded_rectangle([(175, 370), (265, 430)], radius=10, fill=(30, 41, 59))
-                    draw.text((195, 392), "🔢 Keypad", fill=(240, 240, 240))
+                    draw.text((195, 392), "Keypad", fill=(240, 240, 240), font=f_body)
                     
                     draw.rounded_rectangle([(275, 370), (375, 430)], radius=10, fill=(30, 41, 59))
-                    draw.text((300, 392), "🔊 Speaker", fill=(240, 240, 240))
+                    draw.text((300, 392), "Speaker", fill=(240, 240, 240), font=f_body)
                     
                     # End Call Button
-                    draw.ellipse([(185, 550), (255, 620)], fill=(239, 68, 68))
-                    draw.text((212, 576), "☎", fill=(255, 255, 255))
+                    draw.rounded_rectangle([(160, 550), (280, 610)], radius=16, fill=(239, 68, 68))
+                    draw.text((185, 570), "END CALL", fill=(255, 255, 255), font=f_sub)
 
                 else:
                     # Home Screen Launcher
-                    draw.text((26, 78), "📱 Android Home Screen", fill=(255, 255, 255))
+                    draw.text((26, 78), "Android Home Screen", fill=(255, 255, 255), font=f_body)
                     
                     # Search Bar
                     draw.rounded_rectangle([(30, 140), (410, 185)], radius=20, fill=(30, 41, 59), outline=(71, 85, 105))
-                    draw.text((55, 154), "🔍 Google Search", fill=(148, 163, 184))
+                    draw.text((55, 154), "Search Google", fill=(148, 163, 184), font=f_body)
                     
-                    # App Icons Grid
-                    icons = [
-                        ("📞", "Phone", (34, 197, 94)),
-                        ("💬", "Messages", (59, 130, 246)),
-                        ("🌐", "Chrome", (234, 179, 8)),
-                        ("📷", "Camera", (168, 85, 247)),
-                        ("⚙️", "Settings", (100, 116, 139)),
-                        ("📁", "Files", (249, 115, 22))
+                    # App Tiles Grid
+                    apps = [
+                        ("PHONE", (34, 197, 94)),
+                        ("MESSAGES", (59, 130, 246)),
+                        ("CHROME", (234, 179, 8)),
+                        ("CAMERA", (168, 85, 247)),
+                        ("SETTINGS", (100, 116, 139)),
+                        ("FILES", (249, 115, 22))
                     ]
-                    for idx, (sym, lbl, col) in enumerate(icons):
+                    for idx, (lbl, col) in enumerate(apps):
                         r = idx // 3
                         c = idx % 3
                         ix = 55 + c * 125
                         iy = 240 + r * 115
-                        draw.rounded_rectangle([(ix, iy), (ix + 68, iy + 68)], radius=16, fill=col)
-                        draw.text((ix + 22, iy + 20), sym, fill=(255, 255, 255))
-                        draw.text((ix + 10, iy + 76), lbl, fill=(203, 213, 225))
+                        draw.rounded_rectangle([(ix, iy), (ix + 70, iy + 70)], radius=16, fill=col)
+                        draw.text((ix + 12, iy + 26), lbl[:4], fill=(255, 255, 255), font=f_bold)
+                        draw.text((ix + 6, iy + 76), lbl, fill=(203, 213, 225), font=f_small)
 
-                # 4. Top Push Notification Banner (If notification active)
+                # 4. Top Notification Banner (If active)
                 if self._notification:
                     draw.rounded_rectangle([(24, 112), (416, 172)], radius=14, fill=(30, 58, 138), outline=(59, 130, 246), width=2)
-                    draw.text((38, 122), self._notification.get("title", "Notification"), fill=(224, 242, 254))
-                    draw.text((38, 144), self._notification.get("text", "")[:42], fill=(255, 255, 255))
+                    draw.text((38, 122), self._notification.get("title", "NOTIFICATION"), fill=(224, 242, 254), font=f_bold)
+                    draw.text((38, 144), self._notification.get("text", "")[:45], fill=(255, 255, 255), font=f_body)
 
                 # 5. Bottom Navigation Bar
                 draw.rectangle([(14, 705), (426, 766)], fill=(12, 15, 20))
-                draw.text((95, 725), "◀", fill=(160, 160, 160))
-                draw.text((215, 725), "●", fill=(160, 160, 160))
-                draw.text((335, 725), "■", fill=(160, 160, 160))
+                draw.text((95, 725), "BACK", fill=(160, 160, 160), font=f_small)
+                draw.text((205, 725), "HOME", fill=(160, 160, 160), font=f_small)
+                draw.text((315, 725), "RECENTS", fill=(160, 160, 160), font=f_small)
 
                 img.save(target_path)
             else:
